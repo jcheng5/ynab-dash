@@ -137,6 +137,43 @@ async function main() {
   app.listen(port, () => {
     console.error(`Listening on http://0.0.0.0:${port}`);
   });
+
+  function wrap(
+    asyncHandler: (req: Request, res: ExpressResponse) => Promise<void>
+  ) {
+    return async function (
+      req: Request,
+      res: ExpressResponse,
+      next: (error: any) => void
+    ) {
+      try {
+        const s = req.session as any as SessionState;
+        const expiresAt = new Date(s.created_at * 1000 + s.expires_in * 1000);
+        if (expiresAt < new Date()) {
+          // expired; try refreshing
+          const refreshUrl = `https://app.youneedabudget.com/oauth/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=refresh_token&refresh_token=${s.refresh_token}`;
+          const resp = await fetch(refreshUrl, { method: "POST" });
+          const respBody: any = await resp.json();
+          s.access_token = respBody.access_token;
+          s.refresh_token = respBody.refresh_token;
+          s.expires_in = respBody.expires_in;
+          s.created_at = respBody.created_at;
+        }
+        await asyncHandler(req, res);
+      } catch (e) {
+        await new Promise((resolve, reject) => {
+          req.session.destroy((err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(null);
+            }
+          });
+        });
+        next(e);
+      }
+    };
+  }
 }
 
 async function ynabFetch(req: Request, path: string): Promise<FetchResponse> {
@@ -148,22 +185,6 @@ async function ynabFetch(req: Request, path: string): Promise<FetchResponse> {
     },
   });
   return resp;
-}
-
-function wrap(
-  asyncHandler: (req: Request, res: ExpressResponse) => Promise<void>
-) {
-  return async function (
-    req: Request,
-    res: ExpressResponse,
-    next: (error: any) => void
-  ) {
-    try {
-      await asyncHandler(req, res);
-    } catch (e) {
-      next(e);
-    }
-  };
 }
 
 main();

@@ -4,7 +4,8 @@ import * as ynab from "ynab";
 
 interface BudgetMeta {
   readonly userId: string;
-  readonly budgetId: string;
+  readonly id: string;
+  readonly name: string;
   readonly categoryGroups: ReadonlyArray<CategoryGroup>;
 }
 
@@ -83,7 +84,7 @@ function CategoryDisplay({
       <th>{category.name}</th>
       <td>
         {summary.starting === 0 ? (
-          <span className="text-muted fst-italic">(Not budgeted)</span>
+          <span className="text-muted">&mdash;</span>
         ) : (
           `${(used * 100).toFixed(1)}%`
         )}
@@ -123,7 +124,7 @@ function CategoryGroupChoice({
               onChange={(e) => {
                 oncategorychange(
                   budget.userId,
-                  budget.budgetId,
+                  budget.id,
                   cat.id,
                   e.target.checked
                 );
@@ -227,6 +228,14 @@ function App({
 }: BudgetMetaProps & SelectionStateProps & OnCategoryChangeProps) {
   return (
     <div>
+      <nav className="navbar navbar-expand-lg navbar-light bg-light mb-3">
+        <div className="container-fluid">
+          <a className="navbar-brand" href="#">
+            {budget.name}
+          </a>
+        </div>
+      </nav>
+
       <table className="table" style={{ width: "fit-content" }}>
         <thead>
           <tr>
@@ -265,6 +274,7 @@ async function getBudgetMeta(): Promise<BudgetMeta> {
     "/budgets/default"
   );
   const budgetId = budgetResp.data.budget.id;
+  const budgetName = budgetResp.data.budget.name;
 
   const categoriesResp = await ynabFetch<ynab.CategoriesResponse>(
     "/budgets/default/categories"
@@ -285,23 +295,24 @@ async function getBudgetMeta(): Promise<BudgetMeta> {
       };
     });
 
-  const budgetState: BudgetMeta = {
+  const budget: BudgetMeta = {
     userId,
-    budgetId,
+    id: budgetId,
+    name: budgetName,
     categoryGroups,
   };
 
-  return budgetState;
+  return budget;
 }
 
-let budgetState;
+let budget;
 let storageKey;
 async function refresh() {
-  if (!budgetState) {
-    budgetState = await getBudgetMeta();
+  if (!budget) {
+    budget = await getBudgetMeta();
 
-    const { userId, budgetId } = budgetState;
-    storageKey = `config/${userId}/${budgetId}/selected-categories`;
+    const { userId, id } = budget;
+    storageKey = `config/${userId}/${id}/selected-categories`;
 
     // Refresh when other windows modify the selection list
     window.addEventListener("storage", (e) => {
@@ -320,7 +331,7 @@ async function refresh() {
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${now.getMonth() + 1}-01`;
   const month = await ynabFetch<ynab.MonthDetailResponse>(
-    `/budgets/${budgetState.budgetId}/months/${thisMonth}`
+    `/budgets/${budget.id}/months/${thisMonth}`
   );
   month.data.month.categories.map((cat) => {
     const budgeted = cat.budgeted / 1000,
@@ -343,7 +354,7 @@ async function refresh() {
 
   ReactDOM.render(
     <App
-      budget={budgetState}
+      budget={budget}
       selection={selectedCategories}
       selectionSummaries={selectionSummaries}
       oncategorychange={onCategoryChange}
