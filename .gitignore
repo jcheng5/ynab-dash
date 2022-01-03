@@ -1,0 +1,6 @@
+node_modules/
+secrets.json
+dist/
+assets/js/client.js
+assets/js/client.js.map
+sessions/
